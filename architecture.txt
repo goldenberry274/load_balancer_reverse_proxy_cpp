@@ -1,0 +1,78 @@
+f5-style-load-balancer/
+│
+├── README.md
+├── CMakeLists.txt
+├── Dockerfile
+├── docker-compose.yml
+├── config.yaml
+├── .gitignore
+│
+├── docs/
+│   ├── architecture.md
+│   ├── benchmarks.md
+│   └── design-decisions.md
+│
+├── include/
+│   ├── config/
+│   │   └── Config.hpp
+│   ├── core/
+│   │   ├── Server.hpp
+│   │   ├── Connection.hpp
+│   │   └── ThreadPool.hpp
+│   ├── proxy/
+│   │   ├── ReverseProxy.hpp
+│   │   └── HttpParser.hpp
+│   ├── balancer/
+│   │   ├── LoadBalancer.hpp
+│   │   ├── RoundRobinBalancer.hpp
+│   │   └── WeightedBalancer.hpp
+│   ├── health/
+│   │   └── HealthChecker.hpp
+│   ├── security/
+│   │   └── RateLimiter.hpp
+│   └── observability/
+│       ├── Logger.hpp
+│       └── Metrics.hpp
+│
+├── src/
+│   ├── main.cpp
+│   ├── config/
+│   │   └── Config.cpp
+│   ├── core/
+│   │   ├── Server.cpp
+│   │   ├── Connection.cpp
+│   │   └── ThreadPool.cpp
+│   ├── proxy/
+│   │   ├── ReverseProxy.cpp
+│   │   └── HttpParser.cpp
+│   ├── balancer/
+│   │   ├── LoadBalancer.cpp
+│   │   ├── RoundRobinBalancer.cpp
+│   │   └── WeightedBalancer.cpp
+│   ├── health/
+│   │   └── HealthChecker.cpp
+│   ├── security/
+│   │   └── RateLimiter.cpp
+│   └── observability/
+│       ├── Logger.cpp
+│       └── Metrics.cpp
+│
+├── tests/
+│   ├── CMakeLists.txt
+│   ├── test_http_parser.cpp
+│   ├── test_round_robin.cpp
+│   ├── test_rate_limiter.cpp
+│   └── test_config.cpp
+│
+├── examples/
+│   ├── backend_server.py
+│   └── sample_config.yaml
+│
+├── scripts/
+│   ├── run_demo.sh
+│   ├── benchmark.sh
+│   └── generate_traffic.sh
+│
+└── monitoring/
+    ├── prometheus.yml
+    └── grafana-dashboard.json
