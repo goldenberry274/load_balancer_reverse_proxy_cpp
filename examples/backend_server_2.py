@@ -4,6 +4,6 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Hello from backend 1")
+        self.wfile.write(b"Hello from backend 3")
 
 HTTPServer(("127.0.0.1", 9003), Handler).serve_forever()
