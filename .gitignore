@@ -1,0 +1,10 @@
+#Ignore all build artifacts
+build/
+.cache/
+bin/
+obj/
+
+#Ignore IDE-specific folders
+.vscode/
+.idea/
+cmake-build-debug/
