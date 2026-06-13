@@ -15,9 +15,18 @@ RoundRobinBalancer::RoundRobinBalancer(
 
 Backend RoundRobinBalancer::getNextBackend()
 {
-    Backend selected = backends[current];
+    size_t attempts = 0;
 
-    current = (current + 1) % backends.size();
+    while (attempts < backends.size()) {
+        Backend selected = backends[current];
+        current = (current + 1) % backends.size();
 
-    return selected;
+        if (selected.healthy) {
+            return selected;
+        }
+
+        attempts++;
+    }
+
+    throw std::runtime_error("No healthy backends available");
 }
