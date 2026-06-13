@@ -1,10 +1,19 @@
 #include "core/Server.hpp"
+
 #include <iostream>
+#include <cstring>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 
-Server::Server(int port) : port_(port), server_fd_(-1), is_running_(false) {}
+Server::Server(int port, const std::vector<Backend>& backends)
+    : port_(port),
+      server_fd_(-1),
+      is_running_(false),
+      balancer_(backends)
+{
+}
 
 Server::~Server() {
     stop();
@@ -22,10 +31,10 @@ void Server::start() {
 
     sockaddr_in address{};
     address.sin_family = AF_INET;
-    address.sin_addr.s_addr = INADDR_ANY; // Accept links from any IP
+    address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(port_);
 
-    if (bind(server_fd_, (struct sockaddr*)&address, sizeof(address)) < 0) {
+    if (bind(server_fd_, (sockaddr*)&address, sizeof(address)) < 0) {
         std::cerr << "Bind failed on port " << port_ << "\n";
         return;
     }
@@ -36,7 +45,7 @@ void Server::start() {
     }
 
     is_running_ = true;
-    std::cout << "Server successfully started on port " << port_ << "...\n";
+    std::cout << "Server started on port " << port_ << "\n";
 
     while (is_running_) {
         sockaddr_in client_addr{};
@@ -44,12 +53,14 @@ void Server::start() {
 
         int client_fd = accept(
             server_fd_,
-            (struct sockaddr*)&client_addr,
+            (sockaddr*)&client_addr,
             &addrlen
         );
-        
+
         if (client_fd < 0) {
-            if (is_running_) std::cerr << "Accept connection failed\n";
+            if (is_running_) {
+                std::cerr << "Accept connection failed\n";
+            }
             continue;
         }
 
@@ -57,30 +68,90 @@ void Server::start() {
     }
 }
 
-void Server::handleClient(int client_fd) {
-    char buffer[1024] = {0};
-    
-    // Read raw data sent by the client
-    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer) - 1);
-    if (bytes_read > 0) {
-        std::cout << "Received from client: " << buffer << "\n";
-        
-        // Send a simple response back to the client
-        std::string response = "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\nHello from C++ Server!";
-        write(client_fd, response.c_str(), response.length());
+int Server::connectToBackend(const Backend& backend) {
+    int backend_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    if (backend_fd < 0) {
+        std::cerr << "Backend socket creation failed\n";
+        return -1;
     }
 
-    // Close client connection
+    sockaddr_in backend_addr{};
+    backend_addr.sin_family = AF_INET;
+    backend_addr.sin_port = htons(backend.port);
+
+    if (inet_pton(AF_INET, backend.host.c_str(), &backend_addr.sin_addr) <= 0) {
+        std::cerr << "Invalid backend address: " << backend.host << "\n";
+        close(backend_fd);
+        return -1;
+    }
+
+    if (connect(
+            backend_fd,
+            (sockaddr*)&backend_addr,
+            sizeof(backend_addr)) < 0)
+    {
+        std::cerr << "Failed to connect to backend "
+                  << backend.host << ":" << backend.port << "\n";
+
+        close(backend_fd);
+        return -1;
+    }
+
+    return backend_fd;
+}
+
+void Server::handleClient(int client_fd) {
+    char buffer[4096] = {0};
+
+    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
+
+    if (bytes_read <= 0) {
+        close(client_fd);
+        return;
+    }
+
+    Backend backend = balancer_.getNextBackend();
+
+    std::cout << "Forwarding request to backend "
+              << backend.host << ":" << backend.port << "\n";
+
+    int backend_fd = connectToBackend(backend);
+
+    if (backend_fd < 0) {
+        std::string error_response =
+            "HTTP/1.1 502 Bad Gateway\r\n"
+            "Content-Type: text/plain\r\n"
+            "\r\n"
+            "Backend unavailable";
+
+        write(client_fd, error_response.c_str(), error_response.length());
+        close(client_fd);
+        return;
+    }
+
+    send(backend_fd, buffer, bytes_read, 0);
+
+    char response_buffer[4096] = {0};
+
+    ssize_t backend_bytes =
+        recv(backend_fd, response_buffer, sizeof(response_buffer), 0);
+
+    if (backend_bytes > 0) {
+        send(client_fd, response_buffer, backend_bytes, 0);
+    }
+
+    close(backend_fd);
     close(client_fd);
 }
 
 void Server::stop() {
     if (is_running_) {
         is_running_ = false;
-        if (server_fd_ != -1) {
-            close(server_fd_);
-            server_fd_ = -1;
-        }
-        std::cout << "Server stopped.\n";
+    }
+
+    if (server_fd_ != -1) {
+        close(server_fd_);
+        server_fd_ = -1;
     }
 }
