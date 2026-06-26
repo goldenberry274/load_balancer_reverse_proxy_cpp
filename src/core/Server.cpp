@@ -7,14 +7,24 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
+Server::Server(int port, std::shared_ptr<std::vector<Backend>> backends)
+    : port_(port),
+      server_fd_(-1),
+      is_running_(false),
+      balancer_(backends),
+      health_checker_(backends)
+{
+}
+
 Server::Server(int port, const std::vector<Backend>& backends)
     : port_(port),
       server_fd_(-1),
       is_running_(false),
-      balancer_(backends)
+      backends_(std::make_shared<std::vector<Backend>>(backends)),
+      balancer_(backends_),
+      health_checker_(backends_)
 {
 }
-
 Server::~Server() {
     stop();
 }
@@ -46,6 +56,7 @@ void Server::start() {
 
     is_running_ = true;
     std::cout << "Server started on port " << port_ << "\n";
+    health_checker_.start();
 
     while (is_running_) {
         sockaddr_in client_addr{};
@@ -148,6 +159,7 @@ void Server::handleClient(int client_fd) {
 void Server::stop() {
     if (is_running_) {
         is_running_ = false;
+        health_checker_.stop();
     }
 
     if (server_fd_ != -1) {
