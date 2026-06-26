@@ -20,6 +20,7 @@ class RoundRobinBalancer : public LoadBalancer{
     public:
         //For debugging purposes
         explicit RoundRobinBalancer(initializer_list<Backend> backends, mutex& mutex);
+        //The constructor that will be most used
         explicit RoundRobinBalancer(shared_ptr<vector<Backend>> backends, mutex& mutex);
         Backend getNextBackend() override;
 };

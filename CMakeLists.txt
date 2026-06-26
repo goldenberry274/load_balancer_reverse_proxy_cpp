@@ -16,6 +16,8 @@ target_include_directories(load_balancer PRIVATE
     ${PROJECT_SOURCE_DIR}/include
 )
 
+target_link_libraries(load_balancer PRIVATE yaml-cpp)
+
 if(UNIX)
     target_link_libraries(load_balancer PRIVATE pthread)
 endif()

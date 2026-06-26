@@ -1,18 +1,24 @@
 #include "core/Server.hpp"
 #include "balancer/Backend.hpp"
+#include "config/config.hpp"
 
 #include <vector>
+#include <iostream>
 
+int main(int argc, char* argv[]) {
+    if (argc < 2){
+        std::cout << "Usage: " << argv[0] << " <config_path> " << std::endl;
+        return 1;
+    }
+    
+    std::string config_path = argv[1];
+    Config config(config_path);
 
-int main() {
+    Server server(
+        config.listenPort,
+        config.backends
+    );
 
-    std::vector<Backend> backends = {
-        {"127.0.0.1", 9001},
-        {"127.0.0.1", 9002},
-        {"127.0.0.1", 9003}
-    };
-
-    Server server(8080, backends);
     server.start();
 
     return 0;
