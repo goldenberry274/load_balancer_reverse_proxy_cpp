@@ -9,11 +9,11 @@
 
 HealthChecker::HealthChecker(
     std::shared_ptr<std::vector<Backend>> backends,
-    //std::mutex& backends_mutex,
+    std::mutex& backends_mutex,
     int interval_seconds
 )
     : backends_(std::move(backends)),
-      //backends_mutex_(backends_mutex),
+      backends_mutex_(backends_mutex),
       running_(false),
       interval_seconds_(interval_seconds)
 {
@@ -47,7 +47,7 @@ void HealthChecker::loop()
 {
     while (running_) {
         {
-            //std::lock_guard<std::mutex> lock(backends_mutex_);
+            std::lock_guard<std::mutex> lock(backends_mutex_);
 
             for (Backend backend : *backends_) {
                 bool was_healthy = backend.healthy;

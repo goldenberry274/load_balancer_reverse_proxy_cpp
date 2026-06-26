@@ -11,18 +11,17 @@ Server::Server(int port, std::shared_ptr<std::vector<Backend>> backends)
     : port_(port),
       server_fd_(-1),
       is_running_(false),
-      balancer_(backends),
-      health_checker_(backends)
+      backends_(std::move(backends)),
+      balancer_(backends_, backends_mutex_),
+      health_checker_(backends_, backends_mutex_, 3)
 {
 }
 
 Server::Server(int port, const std::vector<Backend>& backends)
-    : port_(port),
-      server_fd_(-1),
-      is_running_(false),
-      backends_(std::make_shared<std::vector<Backend>>(backends)),
-      balancer_(backends_),
-      health_checker_(backends_)
+    : Server(
+          port,
+          std::make_shared<std::vector<Backend>>(backends)
+      )
 {
 }
 Server::~Server() {

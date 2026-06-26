@@ -11,7 +11,7 @@
 class HealthChecker {
 private:
     std::shared_ptr<std::vector<Backend>> backends_;
-    //std::mutex& backends_mutex_;
+    std::mutex& backends_mutex_;
 
     std::thread worker_;
     std::atomic<bool> running_;
@@ -24,7 +24,7 @@ private:
 public:
     HealthChecker(
         std::shared_ptr<std::vector<Backend>> backends,
-        //std::mutex& backends_mutex,
+        std::mutex& backends_mutex,
         int interval_seconds = 3
     );
 

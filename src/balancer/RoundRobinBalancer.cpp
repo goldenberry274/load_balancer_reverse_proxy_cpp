@@ -3,8 +3,9 @@
 #include <stdexcept>
 
 RoundRobinBalancer::RoundRobinBalancer(
-    std::initializer_list<Backend> backends)
+    std::initializer_list<Backend> backends, std::mutex& mutex)
     : backends(std::make_shared<std::vector<Backend>>(backends)),
+      mutex_(mutex),
       current(0)
 {
     if (std::empty(backends)) {
@@ -14,8 +15,9 @@ RoundRobinBalancer::RoundRobinBalancer(
 }
 
 RoundRobinBalancer::RoundRobinBalancer(
-    std::shared_ptr<std::vector<Backend>> backends)
+    std::shared_ptr<std::vector<Backend>> backends, std::mutex& mutex)
     : backends(std::move(backends)),
+      mutex_(mutex),
       current(0)
 {
     if (!this->backends || this->backends->empty()) {
@@ -26,10 +28,17 @@ RoundRobinBalancer::RoundRobinBalancer(
 
 Backend RoundRobinBalancer::getNextBackend()
 {
+    std::lock_guard<std::mutex> lock(mutex_);
+
+    if (!backends || backends->empty()) {
+        throw std::runtime_error("No backends configured");
+    }
+
     size_t attempts = 0;
 
     while (attempts < backends->size()) {
         Backend selected = backends->at(current);
+
         current = (current + 1) % backends->size();
 
         if (selected.healthy) {
