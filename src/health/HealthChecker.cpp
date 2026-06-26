@@ -49,7 +49,7 @@ void HealthChecker::loop()
         {
             std::lock_guard<std::mutex> lock(backends_mutex_);
 
-            for (Backend backend : *backends_) {
+            for (Backend& backend : *backends_) {
                 bool was_healthy = backend.healthy;
                 bool is_healthy = checkBackend(backend);
 
@@ -62,7 +62,9 @@ void HealthChecker::loop()
                         << " is now "
                         << (is_healthy ? "healthy" : "unhealthy")
                         << "\n";
+                    
                 }
+                
             }
         }
 

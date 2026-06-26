@@ -121,7 +121,21 @@ void Server::handleClient(int client_fd) {
         return;
     }
 
-    Backend backend = balancer_.getNextBackend();
+    Backend backend;
+
+    try {
+        backend = balancer_.getNextBackend();
+    } catch (const std::exception& e) {
+        std::string response =
+            "HTTP/1.1 503 Service Unavailable\r\n"
+            "Content-Type: text/plain\r\n"
+            "\r\n"
+            "No healthy backends available";
+
+        send(client_fd, response.c_str(), response.size(), 0);
+        close(client_fd);
+        return;
+    }
 
     std::cout << "Forwarding request to backend "
               << backend.host << ":" << backend.port << "\n";
