@@ -1,4 +1,5 @@
 #include "health/HealthChecker.hpp"
+#include "observability/Logger.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -56,12 +57,10 @@ void HealthChecker::loop()
                 backend.healthy = is_healthy;
 
                 if (was_healthy != is_healthy) {
-                    std::cout
-                        << "[HealthChecker] Backend "
-                        << backend.host << ":" << backend.port
-                        << " is now "
-                        << (is_healthy ? "healthy" : "unhealthy")
-                        << "\n";
+                    Logger::info("[HealthChecker] Backend "+ 
+                                backend.host + ":" + std::to_string(backend.port)
+                                + " is now " + (is_healthy ? "healthy" : "unhealthy") + "\n");
+                    
                     
                 }
                 

@@ -1,4 +1,6 @@
 #include "config/config.hpp"
+#include "observability/Logger.hpp"
+
 #include <iostream>
 #include <yaml-cpp/yaml.h>
 #include <stdexcept>
@@ -38,10 +40,11 @@ Config::Config(const std::string& filename){
         }
 
     }catch (const YAML::BadFile& e) {
-        std::cerr << "Error: Could not find or open config.yaml\n";
+        Logger::error("Error: Could not find or open config.yaml\n");
         throw;
     } catch (const YAML::Exception& e) {
-        std::cerr << "Parser error: " << e.what() << "\n";
+        std::string message = e.what();
+        Logger::error("Parser error: " + message + "\n");
         throw;
     }
 

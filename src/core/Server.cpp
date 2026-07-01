@@ -1,7 +1,9 @@
 #include "core/Server.hpp"
+#include "observability/Logger.hpp"
 
 #include <iostream>
 #include <cstring>
+#include <string>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -31,7 +33,7 @@ Server::~Server() {
 void Server::start() {
     server_fd_ = socket(AF_INET, SOCK_STREAM, 0);
     if (server_fd_ < 0) {
-        std::cerr << "Socket creation failed\n";
+        Logger::error("Socket creation failed\n");
         return;
     }
 
@@ -44,17 +46,17 @@ void Server::start() {
     address.sin_port = htons(port_);
 
     if (bind(server_fd_, (sockaddr*)&address, sizeof(address)) < 0) {
-        std::cerr << "Bind failed on port " << port_ << "\n";
+        Logger::error("Bind failed on port " + std::to_string(port_) + "\n");
         return;
     }
 
     if (listen(server_fd_, 10) < 0) {
-        std::cerr << "Listen failed\n";
+        Logger::error("Listen failed\n");
         return;
     }
 
     is_running_ = true;
-    std::cout << "Server started on port " << port_ << "\n";
+    Logger::info("Server started on port " + std::to_string(port_) + "\n");
     health_checker_.start();
 
     while (is_running_) {
@@ -69,7 +71,7 @@ void Server::start() {
 
         if (client_fd < 0) {
             if (is_running_) {
-                std::cerr << "Accept connection failed\n";
+                Logger::error("Accept connection failed\n");
             }
             continue;
         }
@@ -82,7 +84,7 @@ int Server::connectToBackend(const Backend& backend) {
     int backend_fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (backend_fd < 0) {
-        std::cerr << "Backend socket creation failed\n";
+        Logger::error("Backend socket creation failed\n");
         return -1;
     }
 
@@ -91,7 +93,7 @@ int Server::connectToBackend(const Backend& backend) {
     backend_addr.sin_port = htons(backend.port);
 
     if (inet_pton(AF_INET, backend.host.c_str(), &backend_addr.sin_addr) <= 0) {
-        std::cerr << "Invalid backend address: " << backend.host << "\n";
+        Logger::error("Invalid backend address: " + backend.host + "\n");
         close(backend_fd);
         return -1;
     }
@@ -101,8 +103,9 @@ int Server::connectToBackend(const Backend& backend) {
             (sockaddr*)&backend_addr,
             sizeof(backend_addr)) < 0)
     {
-        std::cerr << "Failed to connect to backend "
-                  << backend.host << ":" << backend.port << "\n";
+        Logger::error("Failed to connect to backend " + backend.host + ":"
+                        + std::to_string(backend.port) + "\n");
+
 
         close(backend_fd);
         return -1;
@@ -136,9 +139,7 @@ void Server::handleClient(int client_fd) {
         close(client_fd);
         return;
     }
-
-    std::cout << "Forwarding request to backend "
-              << backend.host << ":" << backend.port << "\n";
+    Logger::info("Forwarding request to backend " + backend.host + ":" + std::to_string(backend.port) +"\n");
 
     int backend_fd = connectToBackend(backend);
 

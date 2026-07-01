@@ -2,24 +2,32 @@
 #include "balancer/Backend.hpp"
 #include "config/config.hpp"
 
-#include <vector>
 #include <iostream>
 
-int main(int argc, char* argv[]) {
-    if (argc < 2){
-        std::cout << "Usage: " << argv[0] << " <config_path> " << std::endl;
+int main(int argc, char* argv[])
+{
+    std::string configPath = "config.yaml";
+
+    if (argc > 1) {
+        configPath = argv[1];
+    }
+
+    try {
+        Config config(configPath);
+
+        Server server(
+            config.listenPort,
+            config.backends
+        );
+
+        server.start();
+    }
+    catch (const std::exception& e) {
+        std::cerr << "Failed to start load balancer: "
+                  << e.what()
+                  << "\n";
         return 1;
     }
-    
-    std::string config_path = argv[1];
-    Config config(config_path);
-
-    Server server(
-        config.listenPort,
-        config.backends
-    );
-
-    server.start();
 
     return 0;
 }
