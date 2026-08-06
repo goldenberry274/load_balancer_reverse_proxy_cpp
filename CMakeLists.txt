@@ -14,6 +14,7 @@ add_executable(load_balancer ${SOURCES})
 
 target_include_directories(load_balancer PRIVATE
     ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/external
 )
 
 target_link_libraries(load_balancer PRIVATE yaml-cpp)
@@ -27,3 +28,5 @@ target_compile_options(load_balancer PRIVATE
     -Wextra
     -Wpedantic
 )
+enable_testing()
+add_subdirectory(tests)
