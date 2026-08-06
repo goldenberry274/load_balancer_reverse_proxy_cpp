@@ -34,14 +34,17 @@ Backend RoundRobinBalancer::getNextBackend()
         throw std::runtime_error("No backends configured");
     }
 
-    size_t attempts = 0;
+    std::size_t attempts = 0;
 
     while (attempts < backends->size()) {
-        Backend selected = backends->at(current);
+        const std::size_t selectedIndex = current;
+
+        Backend& selected = backends->at(selectedIndex);
 
         current = (current + 1) % backends->size();
 
         if (selected.healthy) {
+            selected.requestsServed++;
             return selected;
         }
 

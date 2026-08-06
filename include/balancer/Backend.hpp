@@ -2,8 +2,9 @@
 
 #include <string>
 
-struct Backend{
+struct Backend {
     std::string host;
     int port;
     bool healthy = true;
+    std::size_t requestsServed = 0;
 };

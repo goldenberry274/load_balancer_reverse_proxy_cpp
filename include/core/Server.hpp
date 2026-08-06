@@ -31,4 +31,5 @@ private:
 
     void handleClient(int client_fd);
     int connectToBackend(const Backend& backend);
+    void sendStatusResponse(int client_fd);
 };

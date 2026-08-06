@@ -46,7 +46,7 @@ void Server::start() {
     address.sin_port = htons(port_);
 
     if (bind(server_fd_, (sockaddr*)&address, sizeof(address)) < 0) {
-        Logger::error("Bind failed on port " + std::to_string(port_) + "\n");
+        Logger::error("Bind failed on port " + std::to_string(port_));
         return;
     }
 
@@ -56,7 +56,7 @@ void Server::start() {
     }
 
     is_running_ = true;
-    Logger::info("Server started on port " + std::to_string(port_) + "\n");
+    Logger::info("Server started on port " + std::to_string(port_));
     health_checker_.start();
 
     while (is_running_) {
@@ -71,7 +71,7 @@ void Server::start() {
 
         if (client_fd < 0) {
             if (is_running_) {
-                Logger::error("Accept connection failed\n");
+                Logger::error("Accept connection failed");
             }
             continue;
         }
@@ -84,7 +84,7 @@ int Server::connectToBackend(const Backend& backend) {
     int backend_fd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (backend_fd < 0) {
-        Logger::error("Backend socket creation failed\n");
+        Logger::error("Backend socket creation failed");
         return -1;
     }
 
@@ -93,7 +93,7 @@ int Server::connectToBackend(const Backend& backend) {
     backend_addr.sin_port = htons(backend.port);
 
     if (inet_pton(AF_INET, backend.host.c_str(), &backend_addr.sin_addr) <= 0) {
-        Logger::error("Invalid backend address: " + backend.host + "\n");
+        Logger::error("Invalid backend address: " + backend.host);
         close(backend_fd);
         return -1;
     }
@@ -104,7 +104,7 @@ int Server::connectToBackend(const Backend& backend) {
             sizeof(backend_addr)) < 0)
     {
         Logger::error("Failed to connect to backend " + backend.host + ":"
-                        + std::to_string(backend.port) + "\n");
+                        + std::to_string(backend.port));
 
 
         close(backend_fd);
@@ -114,12 +114,23 @@ int Server::connectToBackend(const Backend& backend) {
     return backend_fd;
 }
 
-void Server::handleClient(int client_fd) {
+void Server::handleClient(int client_fd)
+{
     char buffer[4096] = {0};
 
-    ssize_t bytes_read = read(client_fd, buffer, sizeof(buffer));
+    const ssize_t bytes_read =
+        read(client_fd, buffer, sizeof(buffer));
 
     if (bytes_read <= 0) {
+        close(client_fd);
+        return;
+    }
+
+    const std::string request(buffer, bytes_read);
+
+    // Internal route handled by the load balancer itself.
+    if (request.rfind("GET /status ", 0) == 0) {
+        sendStatusResponse(client_fd);
         close(client_fd);
         return;
     }
@@ -129,47 +140,123 @@ void Server::handleClient(int client_fd) {
     try {
         backend = balancer_.getNextBackend();
     } catch (const std::exception& e) {
-        std::string response =
+        const std::string response =
             "HTTP/1.1 503 Service Unavailable\r\n"
             "Content-Type: text/plain\r\n"
+            "Content-Length: 29\r\n"
+            "Connection: close\r\n"
             "\r\n"
             "No healthy backends available";
 
-        send(client_fd, response.c_str(), response.size(), 0);
+        send(client_fd, response.data(), response.size(), 0);
         close(client_fd);
         return;
     }
-    Logger::info("Forwarding request to backend " + backend.host + ":" + std::to_string(backend.port) +"\n");
 
-    int backend_fd = connectToBackend(backend);
+    Logger::info(
+        "Forwarding request to backend " +
+        backend.host + ":" +
+        std::to_string(backend.port)
+    );
+
+    const int backend_fd = connectToBackend(backend);
 
     if (backend_fd < 0) {
-        std::string error_response =
+        const std::string error_response =
             "HTTP/1.1 502 Bad Gateway\r\n"
             "Content-Type: text/plain\r\n"
+            "Content-Length: 19\r\n"
+            "Connection: close\r\n"
             "\r\n"
             "Backend unavailable";
 
-        write(client_fd, error_response.c_str(), error_response.length());
+        send(
+            client_fd,
+            error_response.data(),
+            error_response.size(),
+            0
+        );
+
         close(client_fd);
         return;
     }
 
-    send(backend_fd, buffer, bytes_read, 0);
+    // Forward the complete client request.
+    std::size_t request_sent = 0;
 
-    char response_buffer[4096] = {0};
+    while (request_sent < static_cast<std::size_t>(bytes_read)) {
+        const ssize_t sent = send(
+            backend_fd,
+            buffer + request_sent,
+            static_cast<std::size_t>(bytes_read) - request_sent,
+            0
+        );
 
-    ssize_t backend_bytes =
-        recv(backend_fd, response_buffer, sizeof(response_buffer), 0);
+        if (sent <= 0) {
+            Logger::error("Failed to forward request to backend");
+            close(backend_fd);
+            close(client_fd);
+            return;
+        }
 
-    if (backend_bytes > 0) {
-        send(client_fd, response_buffer, backend_bytes, 0);
+        request_sent += static_cast<std::size_t>(sent);
+    }
+
+    char response_buffer[4096];
+
+    // Forward every response chunk until the backend closes its connection.
+    while (true) {
+        const ssize_t backend_bytes = recv(
+            backend_fd,
+            response_buffer,
+            sizeof(response_buffer),
+            0
+        );
+
+        if (backend_bytes == 0) {
+            break;
+        }
+
+        if (backend_bytes < 0) {
+            Logger::error(
+                "Failed to receive response from backend " +
+                backend.host + ":" +
+                std::to_string(backend.port)
+            );
+            break;
+        }
+
+        std::size_t response_sent = 0;
+
+        while (
+            response_sent <
+            static_cast<std::size_t>(backend_bytes)
+        ) {
+            const ssize_t sent = send(
+                client_fd,
+                response_buffer + response_sent,
+                static_cast<std::size_t>(backend_bytes) -
+                    response_sent,
+                0
+            );
+
+            if (sent <= 0) {
+                Logger::error(
+                    "Failed to forward backend response to client"
+                );
+
+                close(backend_fd);
+                close(client_fd);
+                return;
+            }
+
+            response_sent += static_cast<std::size_t>(sent);
+        }
     }
 
     close(backend_fd);
     close(client_fd);
 }
-
 void Server::stop() {
     if (is_running_) {
         is_running_ = false;
@@ -180,4 +267,49 @@ void Server::stop() {
         close(server_fd_);
         server_fd_ = -1;
     }
+}
+void Server::sendStatusResponse(int client_fd)
+{
+    std::string body = "Load Balancer Status\n\n";
+
+    {
+        std::lock_guard<std::mutex> lock(backends_mutex_);
+
+        for (const Backend& backend : *backends_) {
+            body += backend.host + ":" + std::to_string(backend.port) + "\n";
+            body += "Healthy: ";
+            body += backend.healthy ? "yes\n" : "no\n";
+            body += "Requests served: "
+                 + std::to_string(backend.requestsServed)
+                 + "\n\n";
+        }
+    }
+
+    const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/plain; charset=utf-8\r\n"
+        "Content-Length: " + std::to_string(body.size()) + "\r\n"
+        "Connection: close\r\n"
+        "\r\n"
+        + body;
+
+    std::size_t total_sent = 0;
+
+    while (total_sent < response.size()) {
+        const ssize_t sent = send(
+            client_fd,
+            response.data() + total_sent,
+            response.size() - total_sent,
+            0
+        );
+
+        if (sent <= 0) {
+            Logger::error("Failed to send status response");
+            return;
+        }
+
+        total_sent += static_cast<std::size_t>(sent);
+    }
+
+    Logger::info("Status response sent");
 }
