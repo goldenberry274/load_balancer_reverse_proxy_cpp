@@ -1,28 +1,39 @@
 #include "core/Server.hpp"
 #include "observability/Logger.hpp"
 
-#include <iostream>
 #include <cstring>
+#include <memory>
 #include <string>
+#include <utility>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-Server::Server(int port, std::shared_ptr<std::vector<Backend>> backends)
+Server::Server(
+    int port,
+    std::shared_ptr<std::vector<Backend>> backends,
+    std::size_t worker_count
+)
     : port_(port),
       server_fd_(-1),
       is_running_(false),
       backends_(std::move(backends)),
       balancer_(backends_, backends_mutex_),
-      health_checker_(backends_, backends_mutex_, 3)
+      health_checker_(backends_, backends_mutex_, 3),
+      thread_pool_(worker_count)
 {
 }
 
-Server::Server(int port, const std::vector<Backend>& backends)
+Server::Server(
+    int port,
+    const std::vector<Backend>& backends,
+    std::size_t worker_count
+)
     : Server(
           port,
-          std::make_shared<std::vector<Backend>>(backends)
+          std::make_shared<std::vector<Backend>>(backends),
+          worker_count
       )
 {
 }
@@ -76,7 +87,22 @@ void Server::start() {
             continue;
         }
 
-        handleClient(client_fd);
+        try {
+            thread_pool_.enqueue(
+                [this, client_fd]()
+                {
+                    handleClient(client_fd);
+                }
+            );
+        }
+        catch (const std::exception& e) {
+            Logger::error(
+                "Failed to enqueue client: " +
+                std::string(e.what())
+            );
+
+            close(client_fd);
+        }
     }
 }
 

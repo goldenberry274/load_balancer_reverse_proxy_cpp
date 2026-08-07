@@ -50,15 +50,15 @@ TEST_CASE("Config loads listen port and health-check interval")
     TemporaryConfigFile file(
         "test_basic_config.yaml",
         R"(
-listen_port: 8080
+            listen_port: 8080
 
-health_check:
-  interval: 5
+            health_check:
+            interval: 5
 
-backends:
-  - host: 127.0.0.1
-    port: 9001
-)"
+            backends:
+                - host: 127.0.0.1
+                port: 9001
+        )"
     );
 
     Config config(file.filename());
@@ -72,21 +72,21 @@ TEST_CASE("Config loads all backends")
     TemporaryConfigFile file(
         "test_backends_config.yaml",
         R"(
-listen_port: 8080
+            listen_port: 8080
 
-health_check:
-  interval: 3
+            health_check:
+            interval: 3
 
-backends:
-  - host: 127.0.0.1
-    port: 9001
+            backends:
+                - host: 127.0.0.1
+                port: 9001
 
-  - host: 127.0.0.1
-    port: 9002
+                - host: 127.0.0.1
+                port: 9002
 
-  - host: 192.168.1.10
-    port: 9003
-)"
+                - host: 192.168.1.10
+                port: 9003
+        )"
     );
 
     Config config(file.filename());
@@ -119,15 +119,15 @@ TEST_CASE("Config rejects invalid integer values")
     TemporaryConfigFile file(
         "test_invalid_integer.yaml",
         R"(
-listen_port: not-a-number
+            listen_port: not-a-number
 
-health_check:
-  interval: 3
+            health_check:
+                interval: 3
 
-backends:
-  - host: 127.0.0.1
-    port: 9001
-)"
+            backends:
+                - host: 127.0.0.1
+                port: 9001
+        )"
     );
 
     CHECK_THROWS_AS(
@@ -141,13 +141,13 @@ TEST_CASE("Config rejects an empty backend list")
     TemporaryConfigFile file(
         "test_empty_backends.yaml",
         R"(
-listen_port: 8080
+            listen_port: 8080
 
-health_check:
-  interval: 3
+            health_check:
+            interval: 3
 
-backends: []
-)"
+            backends: []
+        )"
     );
 
     CHECK_THROWS_AS(

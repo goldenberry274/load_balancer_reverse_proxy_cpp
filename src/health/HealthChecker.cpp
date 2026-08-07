@@ -59,7 +59,7 @@ void HealthChecker::loop()
                 if (was_healthy != is_healthy) {
                     Logger::info("[HealthChecker] Backend "+ 
                                 backend.host + ":" + std::to_string(backend.port)
-                                + " is now " + (is_healthy ? "healthy" : "unhealthy") + "\n");
+                                + " is now " + (is_healthy ? "healthy" : "unhealthy"));
                     
                     
                 }
