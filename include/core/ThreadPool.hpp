@@ -1,7 +1,5 @@
 #pragma once
 
-#include "observability/Logger.hpp"
-
 #include <condition_variable>
 #include <cstddef>
 #include <functional>
@@ -21,11 +19,13 @@ public:
     void enqueue(std::function<void()> task);
     void stop();
 
+    std::size_t getQueueSize() const;
+
 private:
     std::vector<std::thread> workers_;
     std::queue<std::function<void()>> tasks_;
 
-    std::mutex mutex_;
+    mutable std::mutex mutex_;
     std::condition_variable condition_;
 
     bool stopping_;

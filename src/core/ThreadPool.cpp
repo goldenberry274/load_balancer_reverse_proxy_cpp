@@ -1,4 +1,5 @@
 #include "core/ThreadPool.hpp"
+#include "observability/Logger.hpp"
 
 #include <stdexcept>
 #include <utility>
@@ -108,4 +109,10 @@ void ThreadPool::workerLoop()
             );
         }
     }
+}
+
+std::size_t ThreadPool::getQueueSize() const
+{
+    std::lock_guard<std::mutex> lock(mutex_);
+    return tasks_.size();
 }

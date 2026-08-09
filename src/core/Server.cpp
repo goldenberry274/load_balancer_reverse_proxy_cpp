@@ -175,6 +175,12 @@ void Server::handleClient(int client_fd)
         return;
     }
 
+    if (request.rfind("GET /metrics ", 0) == 0) {
+        sendMetricsResponse(client_fd);
+        close(client_fd);
+    return;
+}
+
     Backend backend;
 
     try {
@@ -373,11 +379,14 @@ void Server::sendStatusResponse(int client_fd)
 
     body += "Average backend latency: " +
             std::to_string(metrics_.getAverageBackendLatencyMs()) +
-            " ms\n\n";
+            " ms\n";
 
     body += "Uptime: " +
             std::to_string(metrics_.getUptime().count()) +
             " seconds\n";
+    body += "Thread pool queued tasks: " +
+        std::to_string(thread_pool_.getQueueSize()) +
+        "\n";
 
     std::size_t healthyBackends = 0;
     std::size_t totalBackends = 0;
@@ -421,4 +430,92 @@ void Server::sendStatusResponse(int client_fd)
         body;
 
     send(client_fd, response.data(), response.size(), 0);
+}
+
+void Server::sendMetricsResponse(int client_fd)
+{
+    std::string body;
+
+    body += "load_balancer_total_requests " +
+            std::to_string(metrics_.getTotalRequests()) + "\n";
+
+    body += "load_balancer_completed_requests " +
+            std::to_string(metrics_.getCompletedRequests()) + "\n";
+
+    body += "load_balancer_failed_requests " +
+            std::to_string(metrics_.getFailedRequests()) + "\n";
+
+    body += "load_balancer_active_connections " +
+            std::to_string(metrics_.getActiveConnections()) + "\n";
+
+    body += "load_balancer_thread_pool_queue_size " +
+            std::to_string(thread_pool_.getQueueSize()) + "\n";
+
+    body += "load_balancer_average_backend_latency_ms " +
+            std::to_string(metrics_.getAverageBackendLatencyMs()) + "\n";
+
+    body += "load_balancer_uptime_seconds " +
+            std::to_string(metrics_.getUptime().count()) + "\n";
+
+    {
+        std::lock_guard<std::mutex> lock(backends_mutex_);
+
+        std::size_t healthyBackends = 0;
+
+        for (const Backend& backend : *backends_) {
+            if (backend.healthy) {
+                ++healthyBackends;
+            }
+        }
+
+        body += "load_balancer_healthy_backends " +
+                std::to_string(healthyBackends) + "\n";
+
+        body += "load_balancer_total_backends " +
+                std::to_string(backends_->size()) + "\n";
+
+        for (const Backend& backend : *backends_) {
+            body +=
+                "load_balancer_backend_requests"
+                "{host=\"" + backend.host +
+                "\",port=\"" + std::to_string(backend.port) +
+                "\"} " +
+                std::to_string(backend.requestsServed) +
+                "\n";
+
+            body +=
+                "load_balancer_backend_healthy"
+                "{host=\"" + backend.host +
+                "\",port=\"" + std::to_string(backend.port) +
+                "\"} " +
+                (backend.healthy ? "1" : "0") +
+                "\n";
+        }
+    }
+
+    const std::string response =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/plain; version=0.0.4; charset=utf-8\r\n"
+        "Content-Length: " + std::to_string(body.size()) + "\r\n"
+        "Connection: close\r\n"
+        "\r\n" +
+        body;
+
+    std::size_t sentTotal = 0;
+
+    while (sentTotal < response.size()) {
+        const ssize_t sent = send(
+            client_fd,
+            response.data() + sentTotal,
+            response.size() - sentTotal,
+            0
+        );
+
+        if (sent <= 0) {
+            Logger::error("Failed to send metrics response");
+            return;
+        }
+
+        sentTotal += static_cast<std::size_t>(sent);
+    }
 }
