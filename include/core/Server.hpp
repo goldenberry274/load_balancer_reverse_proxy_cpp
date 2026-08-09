@@ -4,6 +4,7 @@
 #include "balancer/RoundRobinBalancer.hpp"
 #include "health/HealthChecker.hpp"
 #include "ThreadPool.hpp"
+#include "observability/Metrics.hpp"
 
 #include <memory>
 #include <mutex>
@@ -31,6 +32,7 @@ private:
     RoundRobinBalancer balancer_;
     HealthChecker health_checker_;
     ThreadPool thread_pool_;
+    Metrics metrics_;
 
     void handleClient(int client_fd);
     int connectToBackend(const Backend& backend);

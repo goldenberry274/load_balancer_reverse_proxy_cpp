@@ -152,6 +152,20 @@ void Server::handleClient(int client_fd)
         return;
     }
 
+    // From this point onward, this counts as a handled request.
+    metrics_.requestStarted();
+
+    // Guarantees requestFinished() is called on every return path.
+    struct RequestGuard {
+        Metrics& metrics;
+
+        ~RequestGuard() {
+            metrics.requestFinished();
+        }
+    };
+
+    RequestGuard requestGuard{metrics_};
+
     const std::string request(buffer, bytes_read);
 
     // Internal route handled by the load balancer itself.
@@ -165,7 +179,10 @@ void Server::handleClient(int client_fd)
 
     try {
         backend = balancer_.getNextBackend();
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception& e) {
+        metrics_.requestFailed();
+
         const std::string response =
             "HTTP/1.1 503 Service Unavailable\r\n"
             "Content-Type: text/plain\r\n"
@@ -174,7 +191,13 @@ void Server::handleClient(int client_fd)
             "\r\n"
             "No healthy backends available";
 
-        send(client_fd, response.data(), response.size(), 0);
+        send(
+            client_fd,
+            response.data(),
+            response.size(),
+            0
+        );
+
         close(client_fd);
         return;
     }
@@ -185,9 +208,16 @@ void Server::handleClient(int client_fd)
         std::to_string(backend.port)
     );
 
-    const int backend_fd = connectToBackend(backend);
+    // Begin measuring backend latency.
+    const auto backend_start =
+        std::chrono::steady_clock::now();
+
+    const int backend_fd =
+        connectToBackend(backend);
 
     if (backend_fd < 0) {
+        metrics_.requestFailed();
+
         const std::string error_response =
             "HTTP/1.1 502 Bad Gateway\r\n"
             "Content-Type: text/plain\r\n"
@@ -210,27 +240,39 @@ void Server::handleClient(int client_fd)
     // Forward the complete client request.
     std::size_t request_sent = 0;
 
-    while (request_sent < static_cast<std::size_t>(bytes_read)) {
+    while (
+        request_sent <
+        static_cast<std::size_t>(bytes_read)
+    ) {
         const ssize_t sent = send(
             backend_fd,
             buffer + request_sent,
-            static_cast<std::size_t>(bytes_read) - request_sent,
+            static_cast<std::size_t>(bytes_read) -
+                request_sent,
             0
         );
 
         if (sent <= 0) {
-            Logger::error("Failed to forward request to backend");
+            Logger::error(
+                "Failed to forward request to backend"
+            );
+
+            metrics_.requestFailed();
+
             close(backend_fd);
             close(client_fd);
             return;
         }
 
-        request_sent += static_cast<std::size_t>(sent);
+        request_sent +=
+            static_cast<std::size_t>(sent);
     }
 
     char response_buffer[4096];
 
-    // Forward every response chunk until the backend closes its connection.
+    bool backend_error = false;
+
+    // Forward every response chunk until the backend closes.
     while (true) {
         const ssize_t backend_bytes = recv(
             backend_fd,
@@ -249,6 +291,9 @@ void Server::handleClient(int client_fd)
                 backend.host + ":" +
                 std::to_string(backend.port)
             );
+
+            metrics_.requestFailed();
+            backend_error = true;
             break;
         }
 
@@ -268,16 +313,32 @@ void Server::handleClient(int client_fd)
 
             if (sent <= 0) {
                 Logger::error(
-                    "Failed to forward backend response to client"
+                    "Failed to forward backend response "
+                    "to client"
                 );
+
+                metrics_.requestFailed();
 
                 close(backend_fd);
                 close(client_fd);
                 return;
             }
 
-            response_sent += static_cast<std::size_t>(sent);
+            response_sent +=
+                static_cast<std::size_t>(sent);
         }
+    }
+
+    const auto backend_end =
+        std::chrono::steady_clock::now();
+
+    if (!backend_error) {
+        const auto latency =
+            std::chrono::duration_cast<
+                std::chrono::microseconds
+            >(backend_end - backend_start);
+
+        metrics_.recordBackendLatency(latency);
     }
 
     close(backend_fd);
@@ -310,6 +371,22 @@ void Server::sendStatusResponse(int client_fd)
                  + "\n\n";
         }
     }
+
+    body += "Total requests: " +
+        std::to_string(metrics_.getTotalRequests()) + "\n";
+
+    body += "Completed requests: " +
+        std::to_string(metrics_.getCompletedRequests()) + "\n";
+
+    body += "Failed requests: " +
+        std::to_string(metrics_.getFailedRequests()) + "\n";
+
+    body += "Active connections: " +
+        std::to_string(metrics_.getActiveConnections()) + "\n";
+
+    body += "Average backend latency: " +
+        std::to_string(metrics_.getAverageBackendLatencyMs()) +
+        " ms\n\n";
 
     const std::string response =
         "HTTP/1.1 200 OK\r\n"
