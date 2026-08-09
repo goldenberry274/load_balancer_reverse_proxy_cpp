@@ -359,60 +359,66 @@ void Server::sendStatusResponse(int client_fd)
 {
     std::string body = "Load Balancer Status\n\n";
 
+    body += "Total requests: " +
+            std::to_string(metrics_.getTotalRequests()) + "\n";
+
+    body += "Completed requests: " +
+            std::to_string(metrics_.getCompletedRequests()) + "\n";
+
+    body += "Failed requests: " +
+            std::to_string(metrics_.getFailedRequests()) + "\n";
+
+    body += "Active connections: " +
+            std::to_string(metrics_.getActiveConnections()) + "\n";
+
+    body += "Average backend latency: " +
+            std::to_string(metrics_.getAverageBackendLatencyMs()) +
+            " ms\n\n";
+
+    body += "Uptime: " +
+            std::to_string(metrics_.getUptime().count()) +
+            " seconds\n";
+
+    std::size_t healthyBackends = 0;
+    std::size_t totalBackends = 0;
+
     {
         std::lock_guard<std::mutex> lock(backends_mutex_);
 
+        totalBackends = backends_->size();
+
         for (const Backend& backend : *backends_) {
-            body += backend.host + ":" + std::to_string(backend.port) + "\n";
+            if (backend.healthy) {
+                ++healthyBackends;
+            }
+        }
+
+        body += "Healthy backends: " +
+                std::to_string(healthyBackends) +
+                "/" +
+                std::to_string(totalBackends) +
+                "\n\n";
+
+        for (const Backend& backend : *backends_) {
+            body += backend.host + ":" +
+                    std::to_string(backend.port) + "\n";
+
             body += "Healthy: ";
             body += backend.healthy ? "yes\n" : "no\n";
-            body += "Requests served: "
-                 + std::to_string(backend.requestsServed)
-                 + "\n\n";
+
+            body += "Requests served: " +
+                    std::to_string(backend.requestsServed) +
+                    "\n\n";
         }
     }
-
-    body += "Total requests: " +
-        std::to_string(metrics_.getTotalRequests()) + "\n";
-
-    body += "Completed requests: " +
-        std::to_string(metrics_.getCompletedRequests()) + "\n";
-
-    body += "Failed requests: " +
-        std::to_string(metrics_.getFailedRequests()) + "\n";
-
-    body += "Active connections: " +
-        std::to_string(metrics_.getActiveConnections()) + "\n";
-
-    body += "Average backend latency: " +
-        std::to_string(metrics_.getAverageBackendLatencyMs()) +
-        " ms\n\n";
 
     const std::string response =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: text/plain; charset=utf-8\r\n"
         "Content-Length: " + std::to_string(body.size()) + "\r\n"
         "Connection: close\r\n"
-        "\r\n"
-        + body;
+        "\r\n" +
+        body;
 
-    std::size_t total_sent = 0;
-
-    while (total_sent < response.size()) {
-        const ssize_t sent = send(
-            client_fd,
-            response.data() + total_sent,
-            response.size() - total_sent,
-            0
-        );
-
-        if (sent <= 0) {
-            Logger::error("Failed to send status response");
-            return;
-        }
-
-        total_sent += static_cast<std::size_t>(sent);
-    }
-
-    Logger::info("Status response sent");
+    send(client_fd, response.data(), response.size(), 0);
 }
