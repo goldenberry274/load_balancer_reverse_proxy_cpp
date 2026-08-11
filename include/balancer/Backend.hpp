@@ -5,6 +5,6 @@
 struct Backend {
     std::string host;
     int port;
-    bool healthy = true;
+    bool healthy = false;
     std::size_t requestsServed = 0;
 };

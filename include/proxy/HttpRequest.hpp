@@ -1,10 +1,14 @@
 #pragma once
 
-#include "HttpRequest.hpp"
-
 #include <string>
+#include <unordered_map>
 
-class HttpParser {
-public:
-    static HttpRequest parse(const std::string& rawRequest);
+struct HttpRequest {
+    std::string method;
+    std::string path;
+    std::string version;
+
+    std::unordered_map<std::string, std::string> headers;
+
+    std::string body;
 };

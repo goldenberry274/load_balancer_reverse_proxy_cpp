@@ -1,5 +1,6 @@
 #include "core/Server.hpp"
 #include "observability/Logger.hpp"
+#include "proxy/HttpParser.hpp"
 
 #include <cstring>
 #include <memory>
@@ -166,20 +167,52 @@ void Server::handleClient(int client_fd)
 
     RequestGuard requestGuard{metrics_};
 
-    const std::string request(buffer, bytes_read);
+    const std::string rawRequest(buffer, bytes_read);
 
-    // Internal route handled by the load balancer itself.
-    if (request.rfind("GET /status ", 0) == 0) {
+    HttpRequest request;
+
+    try {
+        request = HttpParser::parse(rawRequest);
+    }
+    catch (const std::exception& e) {
+        Logger::error(
+            "Invalid HTTP request: " +
+            std::string(e.what())
+        );
+
+        const std::string response =
+            "HTTP/1.1 400 Bad Request\r\n"
+            "Content-Type: text/plain\r\n"
+            "Content-Length: 11\r\n"
+            "Connection: close\r\n"
+            "\r\n"
+            "Bad Request";
+
+        send(
+            client_fd,
+            response.data(),
+            response.size(),
+            0
+        );
+
+        close(client_fd);
+        return;
+    }
+
+    if (request.method == "GET" &&
+        request.path == "/status") {
         sendStatusResponse(client_fd);
         close(client_fd);
         return;
     }
 
-    if (request.rfind("GET /metrics ", 0) == 0) {
+    if (request.method == "GET" &&
+        request.path == "/metrics") {
         sendMetricsResponse(client_fd);
         close(client_fd);
-    return;
-}
+        return;
+        }
+    
 
     Backend backend;
 
@@ -350,6 +383,7 @@ void Server::handleClient(int client_fd)
     close(backend_fd);
     close(client_fd);
 }
+
 void Server::stop() {
     if (is_running_) {
         is_running_ = false;
@@ -361,6 +395,7 @@ void Server::stop() {
         server_fd_ = -1;
     }
 }
+
 void Server::sendStatusResponse(int client_fd)
 {
     std::string body = "Load Balancer Status\n\n";
