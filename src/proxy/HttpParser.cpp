@@ -8,7 +8,8 @@ HttpRequest HttpParser::parse(const std::string& rawRequest)
 {
     HttpRequest request;
 
-    const std::size_t headerEnd = rawRequest.find("\r\n\r\n");
+    const std::size_t headerEnd =
+        rawRequest.find("\r\n\r\n");
 
     if (headerEnd == std::string::npos) {
         throw std::runtime_error(
@@ -32,7 +33,6 @@ HttpRequest HttpParser::parse(const std::string& rawRequest)
         );
     }
 
-    // getline removes '\n' but may leave '\r'
     if (!requestLine.empty() &&
         requestLine.back() == '\r') {
         requestLine.pop_back();
@@ -49,18 +49,45 @@ HttpRequest HttpParser::parse(const std::string& rawRequest)
         );
     }
 
-    if (request.method.empty() ||
-        request.path.empty() ||
-        request.version.empty()) {
+    // Reject extra tokens after the HTTP version.
+    std::string extra;
+
+    if (requestLineStream >> extra) {
         throw std::runtime_error(
-            "Malformed HTTP request line"
+            "Malformed HTTP request line: extra data"
+        );
+    }
+
+    // Supported methods for this project.
+    if (request.method != "GET" &&
+        request.method != "POST" &&
+        request.method != "HEAD") {
+        throw std::runtime_error(
+            "Unsupported HTTP method: " + request.method
+        );
+    }
+
+    // Only support HTTP/1.x for now.
+    if (request.version != "HTTP/1.0" &&
+        request.version != "HTTP/1.1") {
+        throw std::runtime_error(
+            "Unsupported HTTP version: " + request.version
+        );
+    }
+
+    // Origin-form request targets normally begin with '/'.
+    if (request.path.empty() ||
+        request.path.front() != '/') {
+        throw std::runtime_error(
+            "Malformed HTTP path: " + request.path
         );
     }
 
     std::string line;
 
     while (std::getline(stream, line)) {
-        if (!line.empty() && line.back() == '\r') {
+        if (!line.empty() &&
+            line.back() == '\r') {
             line.pop_back();
         }
 
@@ -68,7 +95,8 @@ HttpRequest HttpParser::parse(const std::string& rawRequest)
             continue;
         }
 
-        const std::size_t colon = line.find(':');
+        const std::size_t colon =
+            line.find(':');
 
         if (colon == std::string::npos) {
             throw std::runtime_error(
@@ -82,20 +110,20 @@ HttpRequest HttpParser::parse(const std::string& rawRequest)
         std::string value =
             line.substr(colon + 1);
 
-        // Remove leading spaces from header value.
+        if (key.empty()) {
+            throw std::runtime_error(
+                "Malformed HTTP header: empty name"
+            );
+        }
+
         const std::size_t firstNonSpace =
             value.find_first_not_of(" \t");
 
         if (firstNonSpace != std::string::npos) {
             value.erase(0, firstNonSpace);
-        } else {
-            value.clear();
         }
-
-        if (key.empty()) {
-            throw std::runtime_error(
-                "Malformed HTTP header: empty name"
-            );
+        else {
+            value.clear();
         }
 
         request.headers[key] = value;

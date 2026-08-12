@@ -186,7 +186,7 @@ void Server::handleClient(int client_fd)
             "Content-Length: 11\r\n"
             "Connection: close\r\n"
             "\r\n"
-            "Bad Request";
+            "Bad Request\n";
 
         send(
             client_fd,

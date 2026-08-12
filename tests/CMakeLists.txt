@@ -2,10 +2,12 @@ set(TEST_SOURCES
     "${CMAKE_CURRENT_LIST_DIR}/test_main.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/test_round_robin.cpp"
     "${CMAKE_CURRENT_LIST_DIR}/config_test.cpp"
+    "${CMAKE_CURRENT_LIST_DIR}/test_http_parser.cpp"
 
     "${PROJECT_SOURCE_DIR}/src/balancer/RoundRobinBalancer.cpp"
     "${PROJECT_SOURCE_DIR}/src/config/config.cpp"
     "${PROJECT_SOURCE_DIR}/src/observability/Logger.cpp"
+    "${PROJECT_SOURCE_DIR}/src/proxy/HttpParser.cpp"
 )
 
 foreach(source_file IN LISTS TEST_SOURCES)
