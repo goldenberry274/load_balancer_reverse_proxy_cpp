@@ -594,4 +594,6 @@ docs/benchmarks.md
 `architecture.md` describes the major components and concurrency model.
 `benchmarks.md` records load-testing experiments and future benchmarking plans.
 
-en 
+## Limitations
+
+The project in its current form doesn't encrypt traffic data 

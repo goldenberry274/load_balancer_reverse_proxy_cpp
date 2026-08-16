@@ -4,6 +4,12 @@ build/
 bin/
 obj/
 
+build-release/
+
+build-asan/
+
+build-tsan/
+
 #Ignore IDE-specific folders
 .vscode/
 .idea/
